@@ -10,6 +10,10 @@ INK = "#0b0b0b"
 MUTED = "#898781"
 GRIDLINE = "#e1e0d9"
 LAYER_MARKERS = {7: "o", 14: "s", 18: "^", 22: "D"}
+# Validated all-pairs safe for a light-mode static scatter (node scripts/validate_palette.js, dataviz skill):
+# CVD worst-pair ΔE 9.2, normal-vision worst-pair ΔE 16.3. Aqua's low surface contrast is mitigated by the
+# direct labels already on every point (the skill's "relief rule").
+LAYER_COLORS = {7: "#2a78d6", 14: "#eb6834", 18: "#1baf7a", 22: "#4a3aa7"}
 
 
 def summarize(rows: list[dict]) -> list[dict]:
@@ -43,11 +47,11 @@ def plot(summary: list[dict], out_path) -> None:
             s["full_correct_rate"] * 100,
             marker=LAYER_MARKERS[s["layer"]],
             s=90,
-            color=INK,
+            color=LAYER_COLORS[s["layer"]],
             zorder=3,
         )
         ax.annotate(
-            f"L{s['layer']}c{s['coeff']}",
+            f"c{s['coeff']}",
             (s["avg_tokens"], s["full_correct_rate"] * 100),
             textcoords="offset points",
             xytext=(6, 4),
@@ -55,7 +59,10 @@ def plot(summary: list[dict], out_path) -> None:
             color=MUTED,
         )
 
-    handles = [plt.Line2D([0], [0], marker=m, color=INK, linestyle="", markersize=7) for m in LAYER_MARKERS.values()]
+    handles = [
+        plt.Line2D([0], [0], marker=LAYER_MARKERS[l], color=LAYER_COLORS[l], linestyle="", markersize=7)
+        for l in LAYER_MARKERS
+    ]
     ax.legend(handles, [f"layer {l}" for l in LAYER_MARKERS], frameon=False, labelcolor=INK, loc="lower right")
 
     ax.set_xlabel("Average response tokens (dev)", color=INK)
