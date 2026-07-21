@@ -1,0 +1,26 @@
+{
+  "base": {
+    "avg_tokens": 149.95555555555555,
+    "full_correct_rate": 0.9333333333333333,
+    "any_correct_rate": 1.0,
+    "coherent_rate": 1.0
+  },
+  "prompt": {
+    "avg_tokens": 56.82222222222222,
+    "full_correct_rate": 0.9166666666666666,
+    "any_correct_rate": 1.0,
+    "coherent_rate": 1.0
+  },
+  "const": {
+    "avg_tokens": 149.90555555555557,
+    "full_correct_rate": 0.9166666666666666,
+    "any_correct_rate": 1.0,
+    "coherent_rate": 1.0
+  },
+  "prompt_const": {
+    "avg_tokens": 49.34444444444444,
+    "full_correct_rate": 0.9222222222222223,
+    "any_correct_rate": 1.0,
+    "coherent_rate": 1.0
+  }
+}
