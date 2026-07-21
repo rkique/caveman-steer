@@ -45,6 +45,104 @@ is the one to trust.
 
 ![Test set: token count vs. correctness across the four conditions](results/summary_plot_test.png)
 
+## Examples
+
+Real test-set pairs, Prompt vs. Prompt+Steer, both judged fully correct (`correct=2`) — steering
+compresses without dropping the substance:
+
+<details open>
+<summary><code>_map_smtp_headers_to_api_parameters</code> — 131 → 26 tokens</summary>
+
+```python
+def _map_smtp_headers_to_api_parameters(self, email_message):
+    api_data = []
+    for (smtp_key, api_transformer) in six.iteritems(self._headers_map):
+        data_to_transform = email_message.extra_headers.pop(smtp_key, None)
+        if data_to_transform is not None:
+            if isinstance(data_to_transform, (list, tuple)):
+                for data in data_to_transform:
+                    api_data.append((api_transformer[0], api_transformer[1](data)))
+            elif isinstance(data_to_transform, dict):
+                for data in six.iteritems(data_to_transform):
+                    api_data.append(api_transformer(data))
+            else:
+                api_data.append((api_transformer[0], api_transformer[1](data_to_transform)))
+    return api_data
+```
+
+- **Prompt (131 tok):** "Function `_map_smtp_headers_to_api_parameters` takes an `email_message` object and maps its SMTP headers to API parameters. It iterates over a predefined mapping (`_headers_map`) where each key is an SMTP header and the value is a tuple containing an API parameter name and a transformation function. The function extracts the corresponding header values from `email_message.extra_headers`, applies any necessary transformations, and appends the transformed data to `api_data`. If the header value is a list or tuple, it processes each item individually. If it's a dictionary, it processes each key-value pair. Finally, it returns the list of transformed API parameters."
+- **Prompt+Steer (26 tok):** "Email headers map to API params. Iterate over header map. Extract header data. Transform and append to list. Return transformed data."
+</details>
+
+<details>
+<summary><code>other_punctuation</code> — 91 → 29 tokens</summary>
+
+```python
+def other_punctuation():
+    punc = ''.join(set(symbols.ALL_PUNC) - set(symbols.TONE_MARKS) - set(symbols.PERIOD_COMMA) - set(symbols.COLON))
+    return RegexBuilder(pattern_args=punc, pattern_func=lambda x: u'{}'.format(x)).regex
+```
+
+- **Prompt (91 tok):** "The function `other_punctuation()` generates a regular expression that matches any punctuation character except tone marks, periods and commas, and colons. It first creates a string of all punctuation characters using `symbols.ALL_PUNC`. Then it removes tone marks, periods and commas, and colons from this string. Finally, it uses `RegexBuilder` to create a regex pattern that matches any character in the resulting string. The regex is returned by the function."
+- **Prompt+Steer (29 tok):** "This function creates a regex pattern that matches any punctuation symbol except tone marks, periods and commas, and colons. It then returns this pattern."
+</details>
+
+<details>
+<summary><code>get_subject_guide_for_canvas_course_sis_id</code> — 82 → 24 tokens</summary>
+
+```python
+def get_subject_guide_for_canvas_course_sis_id(course_sis_id):
+    (year, quarter, curriculum_abbr, course_number, section_id) = course_sis_id.split('-', 4)
+    return get_subject_guide_for_section_params(year, quarter, curriculum_abbr, course_number, section_id)
+```
+
+- **Prompt (82 tok):** "Function `get_subject_guide_for_canvas_course_sis_id` takes a string `course_sis_id`. It splits this string into five parts using hyphen `-` as delimiter, up to four times. The parts are year, quarter, curriculum abbreviation, course number, and section ID. Then it calls another function `get_subject_guide_for_section_params` with these five parts as arguments and returns its result."
+- **Prompt+Steer (24 tok):** "Function splits `course_sis_id` into parts. Calls another function with those parts. Returns result of that call."
+</details>
+
+<details>
+<summary><code>initial_step</code> (CORDIC algorithm) — 86 → 29 tokens</summary>
+
+```python
+def initial_step(self, phase, x, y):
+    self.x[0] = x
+    self.y[0] = y
+    self.phase[0] = phase
+    if self.MODE == CordicMode.ROTATION:
+        if phase > 0.5:
+            self.x[0] = -x
+            self.phase[0] = phase - 1.0
+        elif phase < -0.5:
+            self.x[0] = -x
+            self.phase[0] = phase + 1.0
+    elif self.MODE == CordicMode.VECTORING:
+        if x < 0.0 and y > 0.0:
+            self.x[0] = -x
+            self.y[0] = -y
+            self.phase[0] = 1.0
+        elif x < 0.0 and y < 0.0:
+            self.x[0] = -x
+            self.y[0] = -y
+            self.phase[0] = -1.0
+```
+
+- **Prompt (86 tok):** "Function `initial_step` sets initial values for coordinates `x`, `y`, and phase. Depending on `MODE`, it adjusts these values based on specific conditions. If in rotation mode, it flips `x` and adjusts phase if outside [-0.5, 0.5]. In vectoring mode, it flips both `x` and `y` and sets phase to 1 or -1 based on quadrant."
+- **Prompt+Steer (29 tok):** "Set initial values for `x`, `y`, and `phase`. Adjust based on `MODE` and input values. Continue with next step."
+</details>
+
+<details>
+<summary><code>check_validation_level</code> — 70 → 22 tokens</summary>
+
+```python
+def check_validation_level(validation_level):
+    if validation_level not in (VALIDATION_LEVEL.QUIET, VALIDATION_LEVEL.STRICT, VALIDATION_LEVEL.TOLERANT):
+        raise UnknownValidationLevel
+```
+
+- **Prompt (70 tok):** "Function `check_validation_level` checks if input `validation_level` is one of predefined constants `VALIDATION_LEVEL.QUIET`, `VALIDATION_LEVEL.STRICT`, or `VALIDATION_LEVEL.TOLERANT`. If not, it raises an exception `UnknownValidationLevel`.\n\nIf valid, proceed with next steps. If invalid, halt and report error."
+- **Prompt+Steer (22 tok):** "Function checks if `validation_level` is one of predefined levels. If not, raises `UnknownValidationLevel`."
+</details>
+
 ### Finding the operating point mattered
 
 The first calibration pass picked its config by sweeping (layer, coefficient) on dev and choosing
