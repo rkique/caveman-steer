@@ -11,7 +11,7 @@ compare four conditions for each test example:
    Persistence, Rules, no-self-reference paragraph, Pattern line — see `model_common.CAVEMAN_SUFFIX`).
    Auto-Clarity, Boundaries, and the language-preservation paragraph are dropped: none of those
    scenarios (destructive ops, writing commits/PRs, non-English input) exist in this task.
-3. **Const-steer** — the diff-in-means vector added at inference, Base prompt (no instruction text).
+3. **Steer** — the diff-in-means vector added at inference, Base prompt (no instruction text).
 4. **Prompt+Steer** — the same vector added at inference, *on top of* the Prompt condition — this
    is the primary comparison: does steering add anything once the instruction is already present?
 
@@ -25,8 +25,8 @@ We split the corpus into 180 train, 50 dev, and 180 held-out test examples, and 
 |---|---|---|
 | Base | 150.0 (censored — see below) | 90-95% |
 | Prompt | 56.8 | 90-95% |
-| Const-steer alone | 149.9 | 90-95% |
-| **Prompt+Steer** | **49.3** | **90-95%** |
+| Steer alone | 149.9 | 90-95% |
+| **Prompt+Steer** | **49.3** | 90-95% |
 
 **Steering on top of the prompt gets a further ~13% token reduction beyond prompting alone.** Constant steering alone results in 149.9 tokens, which makes it indistinguishable from Base; the coefficient was calibrated specifically for the combined regime, not as a standalone replacement for the instruction. This matches a pattern we observed at higher coefficients during calibration: difference-of-means steering alone is substantially weaker than prompting.
 
@@ -41,21 +41,15 @@ The rule from caveman's `SKILL.md` is explicit and mechanically checkable: "Drop
 | Condition | Responses containing a/an/the | Articles per 100 words |
 |---|---|---|
 | Base | 100% | 12.68 |
-| Const-steer alone | 100% | 12.47 |
+| Steer alone | 100% | 12.47 |
 | Prompt | 46.1% | 4.27 |
 | **Prompt+Steer** | **31.1%** | **2.48** |
 
-The prompt instruction (`model_common.CAVEMAN_SUFFIX`) changes model behavior substantially: articles drop roughly 66% relative to Base. Compliance with the specific "drop articles" rule remains only partial, however, and 46% of prompted responses still use one. Const-steer alone (calibrated for the combined regime, not as a standalone replacement) shows no effect on style either, consistent with its lack of effect on length. Steering on top of the prompt pushes
-compliance further than the text instruction manages alone — fewer responses use an article at all,
-and at a lower rate when they do. Since compliance is partial, the examples below were selected for
-being representative (Prompt itself already article-free) rather than for the single biggest
-token-count drop, so this section doesn't accidentally show only the non-compliant half.
+The prompt instruction (`model_common.CAVEMAN_SUFFIX`) changes model behavior substantially: articles drop roughly 66% relative to Base. Compliance with the specific "drop articles" rule remains only partial, however, and 46% of prompted responses still use one. Steer alone (calibrated for the combined regime, not as a standalone replacement) shows no effect on style either, consistent with its lack of effect on length. Steering on top of the prompt pushes compliance further than the text instruction manages alone. Overall, the model uses fewer articles at all, and at a lower rate when they do.
 
 ## Examples
 
-Real test-set pairs, Prompt vs. Prompt+Steer, both judged fully correct (`correct=2`) and Prompt
-itself already caveman-compliant (article-free) — steering compresses further without dropping
-substance:
+In the cases below, both `Prompt` and `Prompt + Steer` examples are judged fully correct (`correct=2`). The `Prompt` response  is already article-free, while steering compresses further without dropping explanatory value:
 
 <details open>
 <summary><code>initial_step</code> (CORDIC algorithm) — 86 → 29 tokens</summary>
@@ -83,8 +77,8 @@ def initial_step(self, phase, x, y):
             self.phase[0] = -1.0
 ```
 
-- **Prompt (86 tok):** "Function `initial_step` sets initial values for coordinates `x`, `y`, and phase. Depending on `MODE`, it adjusts these values based on specific conditions. If in rotation mode, it flips `x` and adjusts phase if outside [-0.5, 0.5]. In vectoring mode, it flips both `x` and `y` and sets phase to 1 or -1 based on quadrant."
-- **Prompt+Steer (29 tok):** "Set initial values for `x`, `y`, and `phase`. Adjust based on `MODE` and input values. Continue with next step."
+- **Prompt (86 tok):** <q>Function `initial_step` sets initial values for coordinates `x`, `y`, and phase. Depending on `MODE`, it adjusts these values based on specific conditions. If in rotation mode, it flips `x` and adjusts phase if outside [-0.5, 0.5]. In vectoring mode, it flips both `x` and `y` and sets phase to 1 or -1 based on quadrant.</q>
+- **Prompt+Steer (29 tok):** <q>Set initial values for `x`, `y`, and `phase`. Adjust based on `MODE` and input values. Continue with next step.</q>
 </details>
 
 <details>
@@ -100,8 +94,8 @@ def gen(skipdirhtml=False):
     sphinx_build['-b', 'html', '-W', '-E', 'docs', 'docs/_build/html'] & FG
 ```
 
-- **Prompt (70 tok):** "Function `gen` generates documentation. It first checks if `docs/changelog.rst` is unchanged using `check_git_unchanged`. If unchanged, it converts `CHANGELOG.md` to `docs/changelog.rst` using Pandoc. Then, based on `skipdirhtml`, it builds HTML and optionally dirHTML documentation using Sphinx."
-- **Prompt+Steer (31 tok):** "Function `gen` generates documentation. Skips directory HTML build if specified. Converts Markdown changelog to RST. Builds Sphinx HTML and dirHTML outputs."
+- **Prompt (70 tok):** <q>Function `gen` generates documentation. It first checks if `docs/changelog.rst` is unchanged using `check_git_unchanged`. If unchanged, it converts `CHANGELOG.md` to `docs/changelog.rst` using Pandoc. Then, based on `skipdirhtml`, it builds HTML and optionally dirHTML documentation using Sphinx.</q>
+- **Prompt+Steer (31 tok):** <q>Function `gen` generates documentation. Skips directory HTML build if specified. Converts Markdown changelog to RST. Builds Sphinx HTML and dirHTML outputs.</q>
 </details>
 
 <details>
@@ -116,8 +110,8 @@ def Uninstall(self, package_name, keep_data=False, timeout_ms=None):
     return self.Shell(' '.join(cmd), timeout_ms=timeout_ms)
 ```
 
-- **Prompt (58 tok):** "Uninstalls specified app. Removes it from device. Optionally keeps user data. Uses `pm uninstall` command. Passes package name. Adds `-k` flag if keeping data. Executes via `Shell` method. Waits up to `timeout_ms`. Returns result of uninstall operation."
-- **Prompt+Steer (26 tok):** "Uninstalls app. Removes it from device. Keeps data if specified. Runs command. Waits for completion. Returns result."
+- **Prompt (58 tok):** <q>Uninstalls specified app. Removes it from device. Optionally keeps user data. Uses `pm uninstall` command. Passes package name. Adds `-k` flag if keeping data. Executes via `Shell` method. Waits up to `timeout_ms`. Returns result of uninstall operation.</q>
+- **Prompt+Steer (26 tok):** <q>Uninstalls app. Removes it from device. Keeps data if specified. Runs command. Waits for completion. Returns result.</q>
 </details>
 
 <details>
@@ -134,8 +128,8 @@ def _call(self, path, method, body=None, headers=None):
     return resp
 ```
 
-- **Prompt (75 tok):** "Function `_call` makes HTTP request. Takes `path`, `method`, optional `body`, and `headers`. Calls `self.http.do_call` with these parameters. If HTTP error occurs, checks status code. If 401, raises `PermissionError` with message about insufficient permissions. Otherwise, re-raises original error. Returns response from HTTP call otherwise."
-- **Prompt+Steer (47 tok):** "Function `_call` sends HTTP request. Takes `path`, `method`, optional `body`, and `headers`. Tries sending request. If gets `401` error, raises `PermissionError`. Otherwise, returns response."
+- **Prompt (75 tok):** <q>Function `_call` makes HTTP request. Takes `path`, `method`, optional `body`, and `headers`. Calls `self.http.do_call` with these parameters. If HTTP error occurs, checks status code. If 401, raises `PermissionError` with message about insufficient permissions. Otherwise, re-raises original error. Returns response from HTTP call otherwise.</q>
+- **Prompt+Steer (47 tok):** <q>Function `_call` sends HTTP request. Takes `path`, `method`, optional `body`, and `headers`. Tries sending request. If gets `401` error, raises `PermissionError`. Otherwise, returns response.</q>
 </details>
 
 <details>
@@ -158,8 +152,8 @@ def callgraph(G, stmt_list):
                 G.add_edge(func_name, s.func_expr.name)
 ```
 
-- **Prompt (65 tok):** "Function `callgraph` takes graph `G` and list of statements `stmt_list`. It adds nodes for functions found in `stmt_list` to graph `G`. Then it iterates over these functions, adding edges to graph `G` for each function call within them. This helps visualize function calls in code structure."
-- **Prompt+Steer (38 tok):** "Function `callgraph` takes graph `G` and list of statements `stmt_list`. It adds nodes for functions found in `stmt_list` and connects nodes with edges representing function calls."
+- **Prompt (65 tok):** <q>Function `callgraph` takes graph `G` and list of statements `stmt_list`. It adds nodes for functions found in `stmt_list` to graph `G`. Then it iterates over these functions, adding edges to graph `G` for each function call within them. This helps visualize function calls in code structure.</q>
+- **Prompt+Steer (38 tok):** <q>Function `callgraph` takes graph `G` and list of statements `stmt_list`. It adds nodes for functions found in `stmt_list` and connects nodes with edges representing function calls.</q>
 </details>
 
 ### Finding the operating point mattered
@@ -177,41 +171,9 @@ and shouldn't, be trusted.
 
 ![Dev sweep: token count vs. correctness across all 20 (layer, coefficient) configs](results/summary_sweep_plot_dev.png)
 
-## Statistical details
-
-**Is the Prompt+Steer test-set result just cherry-picking?** We check two separate risks.
-
-**1. "Prompt+Steer ≥ Prompt" on the test set.** On the test set (n=180), McNemar's exact test on paired fully-correct outcomes gives Prompt 165/180 and Prompt+Steer 166/180 — four examples correct only under Prompt, five correct only under Prompt+Steer — for **p = 1.0**, as close to a coin flip as paired data gets. This means activation steering carries no detectable correctness cost, not that it improves correctness, while still delivering a ~13% token reduction.
-
-**2. Was picking layer 14/coeff 6 out of 20 dev configs cherry-picking?** Partly, yes — and it's
-worth being explicit about where. Wilson 95% CIs on the dev full-correct rate (n=50 per config):
-
-| Layer | Coeff | k/50 | Rate | 95% CI |
-|---|---|---|---|---|
-| 7 | 12 | 48 | 96% | [86.5%, 98.9%] |
-| 7 | 28 | 48 | 96% | [86.5%, 98.9%] |
-| **14** | **6** | **48** | **96%** | **[86.5%, 98.9%]** |
-| 22 | 6 | 48 | 96% | [86.5%, 98.9%] |
-| 22 | 12 | 48 | 96% | [86.5%, 98.9%] |
-| 22 | 36 | 48 | 96% | [86.5%, 98.9%] |
-| 14 | 12 | 44 | 88% | [76.2%, 94.4%] |
-| 18 | 20 | 41 | 82% | [69.2%, 90.2%] |
-| 14 | 36 | 20 | 40% | [27.6%, 53.8%] |
-
-*(full 20-row table: `results/summary_sweep_dev.json`)*
-
-Six different configs tie at exactly 48/50, and the CI on any single one of them comfortably
-overlaps configs as low as 88% or even 82%. With only 50 dev examples per config and 20 configs
-swept, picking "the max observed value" has real winner's-curse risk — the specific rank-1 pick
-among that top cluster shouldn't be over-trusted, which is why the result above is reported as a
-90-95% band rather than "96%." What *is* robust: the top cluster (78-96%, overlapping CIs) and the
-collapsed bottom cluster (40-66% at coeff ≥28, layers 14/18) have **non-overlapping** CIs — the
-qualitative finding "moderate coefficients are safe, aggressive ones collapse correctness" doesn't
-depend on which exact config within the safe cluster you'd pick.
-
 ## Scope decisions
 
-- PSR (arXiv 2605.03907) is paused for now — `src/steering_psr.py` still exists but isn't run.
+- We initially wanted to use the Prompt Steering Replacement (arXiv 2605.03907). However, this is paused for now — `src/steering_psr.py` still exists but isn't run.
   An earlier pass showed the MSE-matching variant underperforming constant steering; revisit later.
 - The judge is `gpt-4o-mini` (OpenAI), not Claude — switched to use available OpenAI credits. Reads
   the key from `openai.key` (gitignored, never commit it).

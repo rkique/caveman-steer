@@ -7,7 +7,8 @@ import matplotlib.pyplot as plt
 from data_utils import RESULTS_DIR, read_jsonl
 
 CONDITIONS = ["base", "prompt", "const", "prompt_const"]
-LABELS = {"base": "Base", "prompt": "Prompt", "const": "Const-steer", "prompt_const": "Prompt+Steer"}
+MAX_NEW_TOKENS = 150  # must match model_common.MAX_NEW_TOKENS; not imported to keep this script torch-free
+LABELS = {"base": "Base", "prompt": "Prompt", "const": "Steer", "prompt_const": "Prompt+Steer"}
 MARKERS = {"base": "o", "prompt": "s", "const": "^", "prompt_const": "D"}
 # Same validated all-pairs-safe 4-color palette as the sweep plot (dataviz skill, light-mode static PNG).
 COLORS = {"base": "#2a78d6", "prompt": "#eb6834", "const": "#1baf7a", "prompt_const": "#4a3aa7"}
@@ -54,8 +55,19 @@ def plot(summary: dict[str, dict], out_path) -> None:
 
     ymin, ymax = ax.get_ylim()
     ax.set_ylim(ymin - 0.3, ymax + 0.9)  # headroom so top annotations clear the title
-    xmin, xmax = ax.get_xlim()
-    ax.set_xlim(xmin, xmax + (xmax - xmin) * 0.12)  # headroom for right-side annotations
+    ax.set_xlim(0, 160)
+
+    ax.axvline(MAX_NEW_TOKENS, color="#e34948", linestyle=(0, (1, 2)), linewidth=1.5, zorder=2)
+    ax.annotate(
+        "MAX_NEW_TOKENS = 150",
+        (MAX_NEW_TOKENS, ax.get_ylim()[1]),
+        textcoords="offset points",
+        xytext=(-8, -4),
+        va="top",
+        ha="right",
+        fontsize=8,
+        color="#e34948",
+    )
 
     ax.set_xlabel("Average response tokens", color=INK)
     ax.set_ylabel("Fully-correct rate", color=INK)

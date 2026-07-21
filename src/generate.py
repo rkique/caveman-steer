@@ -1,4 +1,4 @@
-"""Generate all conditions (Base, Prompt, Const-steer, Prompt+Const-steer) over a data split and save raw outputs."""
+"""Generate all conditions (Base, Prompt, Steer, Prompt+Steer) over a data split and save raw outputs."""
 import argparse
 import json
 
