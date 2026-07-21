@@ -45,62 +45,36 @@ is the one to trust.
 
 ![Test set: token count vs. correctness across the four conditions](results/summary_plot_test.png)
 
+## Is caveman's style actually being followed?
+
+Caveman's rule is explicit and mechanically checkable: "Drop: articles (a/an/the)... Fragments OK."
+So rather than eyeballing it, we measured literal compliance — how often `a`/`an`/`the` still shows
+up despite being told not to, across all 180 test responses:
+
+| Condition | Responses containing a/an/the | Articles per 100 words |
+|---|---|---|
+| Base | 100% | 12.68 |
+| Const-steer alone | 100% | 12.47 |
+| Prompt | 46.1% | 4.27 |
+| **Prompt+Steer** | **31.1%** | **2.48** |
+
+The instruction is genuinely in the prompt (verified directly — see `model_common.CAVEMAN_SUFFIX`)
+and genuinely changes behavior (articles drop ~66% vs. Base), but compliance with the specific
+"drop articles" rule is partial, not total: 46% of Prompt responses still use one. Const-steer alone
+(coefficient calibrated for the combined regime, not as a standalone replacement) shows no effect on
+style either, consistent with it showing no effect on length. Steering on top of the prompt pushes
+compliance further than the text instruction manages alone — fewer responses use an article at all,
+and at a lower rate when they do. Since compliance is partial, the examples below were selected for
+being representative (Prompt itself already article-free) rather than for the single biggest
+token-count drop, so this section doesn't accidentally show only the non-compliant half.
+
 ## Examples
 
-Real test-set pairs, Prompt vs. Prompt+Steer, both judged fully correct (`correct=2`) — steering
-compresses without dropping the substance:
+Real test-set pairs, Prompt vs. Prompt+Steer, both judged fully correct (`correct=2`) and Prompt
+itself already caveman-compliant (article-free) — steering compresses further without dropping
+substance:
 
 <details open>
-<summary><code>_map_smtp_headers_to_api_parameters</code> — 131 → 26 tokens</summary>
-
-```python
-def _map_smtp_headers_to_api_parameters(self, email_message):
-    api_data = []
-    for (smtp_key, api_transformer) in six.iteritems(self._headers_map):
-        data_to_transform = email_message.extra_headers.pop(smtp_key, None)
-        if data_to_transform is not None:
-            if isinstance(data_to_transform, (list, tuple)):
-                for data in data_to_transform:
-                    api_data.append((api_transformer[0], api_transformer[1](data)))
-            elif isinstance(data_to_transform, dict):
-                for data in six.iteritems(data_to_transform):
-                    api_data.append(api_transformer(data))
-            else:
-                api_data.append((api_transformer[0], api_transformer[1](data_to_transform)))
-    return api_data
-```
-
-- **Prompt (131 tok):** "Function `_map_smtp_headers_to_api_parameters` takes an `email_message` object and maps its SMTP headers to API parameters. It iterates over a predefined mapping (`_headers_map`) where each key is an SMTP header and the value is a tuple containing an API parameter name and a transformation function. The function extracts the corresponding header values from `email_message.extra_headers`, applies any necessary transformations, and appends the transformed data to `api_data`. If the header value is a list or tuple, it processes each item individually. If it's a dictionary, it processes each key-value pair. Finally, it returns the list of transformed API parameters."
-- **Prompt+Steer (26 tok):** "Email headers map to API params. Iterate over header map. Extract header data. Transform and append to list. Return transformed data."
-</details>
-
-<details>
-<summary><code>other_punctuation</code> — 91 → 29 tokens</summary>
-
-```python
-def other_punctuation():
-    punc = ''.join(set(symbols.ALL_PUNC) - set(symbols.TONE_MARKS) - set(symbols.PERIOD_COMMA) - set(symbols.COLON))
-    return RegexBuilder(pattern_args=punc, pattern_func=lambda x: u'{}'.format(x)).regex
-```
-
-- **Prompt (91 tok):** "The function `other_punctuation()` generates a regular expression that matches any punctuation character except tone marks, periods and commas, and colons. It first creates a string of all punctuation characters using `symbols.ALL_PUNC`. Then it removes tone marks, periods and commas, and colons from this string. Finally, it uses `RegexBuilder` to create a regex pattern that matches any character in the resulting string. The regex is returned by the function."
-- **Prompt+Steer (29 tok):** "This function creates a regex pattern that matches any punctuation symbol except tone marks, periods and commas, and colons. It then returns this pattern."
-</details>
-
-<details>
-<summary><code>get_subject_guide_for_canvas_course_sis_id</code> — 82 → 24 tokens</summary>
-
-```python
-def get_subject_guide_for_canvas_course_sis_id(course_sis_id):
-    (year, quarter, curriculum_abbr, course_number, section_id) = course_sis_id.split('-', 4)
-    return get_subject_guide_for_section_params(year, quarter, curriculum_abbr, course_number, section_id)
-```
-
-- **Prompt (82 tok):** "Function `get_subject_guide_for_canvas_course_sis_id` takes a string `course_sis_id`. It splits this string into five parts using hyphen `-` as delimiter, up to four times. The parts are year, quarter, curriculum abbreviation, course number, and section ID. Then it calls another function `get_subject_guide_for_section_params` with these five parts as arguments and returns its result."
-- **Prompt+Steer (24 tok):** "Function splits `course_sis_id` into parts. Calls another function with those parts. Returns result of that call."
-</details>
-
-<details>
 <summary><code>initial_step</code> (CORDIC algorithm) — 86 → 29 tokens</summary>
 
 ```python
@@ -131,16 +105,78 @@ def initial_step(self, phase, x, y):
 </details>
 
 <details>
-<summary><code>check_validation_level</code> — 70 → 22 tokens</summary>
+<summary><code>gen</code> (docs build) — 70 → 31 tokens</summary>
 
 ```python
-def check_validation_level(validation_level):
-    if validation_level not in (VALIDATION_LEVEL.QUIET, VALIDATION_LEVEL.STRICT, VALIDATION_LEVEL.TOLERANT):
-        raise UnknownValidationLevel
+def gen(skipdirhtml=False):
+    docs_changelog = 'docs/changelog.rst'
+    check_git_unchanged(docs_changelog)
+    pandoc('--from=markdown', '--to=rst', '--output=' + docs_changelog, 'CHANGELOG.md')
+    if not skipdirhtml:
+        sphinx_build['-b', 'dirhtml', '-W', '-E', 'docs', 'docs/_build/dirhtml'] & FG
+    sphinx_build['-b', 'html', '-W', '-E', 'docs', 'docs/_build/html'] & FG
 ```
 
-- **Prompt (70 tok):** "Function `check_validation_level` checks if input `validation_level` is one of predefined constants `VALIDATION_LEVEL.QUIET`, `VALIDATION_LEVEL.STRICT`, or `VALIDATION_LEVEL.TOLERANT`. If not, it raises an exception `UnknownValidationLevel`.\n\nIf valid, proceed with next steps. If invalid, halt and report error."
-- **Prompt+Steer (22 tok):** "Function checks if `validation_level` is one of predefined levels. If not, raises `UnknownValidationLevel`."
+- **Prompt (70 tok):** "Function `gen` generates documentation. It first checks if `docs/changelog.rst` is unchanged using `check_git_unchanged`. If unchanged, it converts `CHANGELOG.md` to `docs/changelog.rst` using Pandoc. Then, based on `skipdirhtml`, it builds HTML and optionally dirHTML documentation using Sphinx."
+- **Prompt+Steer (31 tok):** "Function `gen` generates documentation. Skips directory HTML build if specified. Converts Markdown changelog to RST. Builds Sphinx HTML and dirHTML outputs."
+</details>
+
+<details>
+<summary><code>Uninstall</code> (ADB package removal) — 58 → 26 tokens</summary>
+
+```python
+def Uninstall(self, package_name, keep_data=False, timeout_ms=None):
+    cmd = ['pm uninstall']
+    if keep_data:
+        cmd.append('-k')
+    cmd.append('"%s"' % package_name)
+    return self.Shell(' '.join(cmd), timeout_ms=timeout_ms)
+```
+
+- **Prompt (58 tok):** "Uninstalls specified app. Removes it from device. Optionally keeps user data. Uses `pm uninstall` command. Passes package name. Adds `-k` flag if keeping data. Executes via `Shell` method. Waits up to `timeout_ms`. Returns result of uninstall operation."
+- **Prompt+Steer (26 tok):** "Uninstalls app. Removes it from device. Keeps data if specified. Runs command. Waits for completion. Returns result."
+</details>
+
+<details>
+<summary><code>_call</code> (HTTP wrapper with 401 handling) — 75 → 47 tokens</summary>
+
+```python
+def _call(self, path, method, body=None, headers=None):
+    try:
+        resp = self.http.do_call(path, method, body, headers)
+    except http.HTTPError as err:
+        if err.status == 401:
+            raise PermissionError('Insufficient permissions to query ' + '%s with user %s :%s' % (path, self.user, err))
+        raise
+    return resp
+```
+
+- **Prompt (75 tok):** "Function `_call` makes HTTP request. Takes `path`, `method`, optional `body`, and `headers`. Calls `self.http.do_call` with these parameters. If HTTP error occurs, checks status code. If 401, raises `PermissionError` with message about insufficient permissions. Otherwise, re-raises original error. Returns response from HTTP call otherwise."
+- **Prompt+Steer (47 tok):** "Function `_call` sends HTTP request. Takes `path`, `method`, optional `body`, and `headers`. Tries sending request. If gets `401` error, raises `PermissionError`. Otherwise, returns response."
+</details>
+
+<details>
+<summary><code>callgraph</code> (static call-graph builder) — 65 → 38 tokens</summary>
+
+```python
+def callgraph(G, stmt_list):
+    func_list = []
+    for stmt in stmt_list:
+        try:
+            G.add_node(stmt.head.ident.name)
+            func_list.append(stmt)
+        except:
+            pass
+    for func in func_list:
+        assert isinstance(func, node.function)
+        func_name = func.head.ident.name
+        for s in node.postorder(func):
+            if s.__class__ is node.funcall and s.func_expr.__class__ is node.ident:
+                G.add_edge(func_name, s.func_expr.name)
+```
+
+- **Prompt (65 tok):** "Function `callgraph` takes graph `G` and list of statements `stmt_list`. It adds nodes for functions found in `stmt_list` to graph `G`. Then it iterates over these functions, adding edges to graph `G` for each function call within them. This helps visualize function calls in code structure."
+- **Prompt+Steer (38 tok):** "Function `callgraph` takes graph `G` and list of statements `stmt_list`. It adds nodes for functions found in `stmt_list` and connects nodes with edges representing function calls."
 </details>
 
 ### Finding the operating point mattered
