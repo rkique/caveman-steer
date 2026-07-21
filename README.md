@@ -1,9 +1,9 @@
 # Does activation steering help on top of an already-terse prompt?
 
-Tests whether constant activation steering (Stolfo et al., arXiv 2410.12877 — a diff-in-means
-vector added at inference) can push `Qwen2.5-Coder-7B-Instruct`'s code explanations *shorter than
-prompting alone already gets them*, rather than treating steering as a standalone replacement for
-prompting. Four conditions per test example:
+This repository contains experimental data and code investigating whether constant activation steering for instruction
+following (as studied by Stolfo et al., arXiv 2410.12877, among others) can make `Qwen2.5-Coder-7B-Instruct`'s code
+explanations shorter than prompting alone already achieves, while maintaining explanation accuracy and clarity. We
+compare four conditions for each test example:
 
 1. **Base** — neutral prompt, no instruction, no steering.
 2. **Prompt** — caveman's actual "full" mode instruction, word for word from
@@ -15,14 +15,11 @@ prompting. Four conditions per test example:
 4. **Prompt+Steer** — the same vector added at inference, *on top of* the Prompt condition — this
    is the primary comparison: does steering add anything once the instruction is already present?
 
-Data: CodeXGLUE code-to-text (Python), docstrings stripped from the code via AST before use as
-reference explanations, to avoid leaking the answer into the prompt (`src/data_prep.py`).
+The experiments are conducted on the CodeXGLUE code-to-text task. All docstrings are stripped from the code via AST prior to use as reference explanations, which prevents answer leakage into the prompt body (`src/data_prep.py`).
 
-## Result
+## Main Result
 
-Test set (180 held-out examples), judged by `gpt-4o-mini` for correctness against the original
-docstring, blinded to condition. Correctness is reported as a rounded band, not false-precision
-decimals — see [Statistical details](#statistical-details) for why and for the exact counts:
+We split the corpus into 180 train, 50 dev, and 180 held-out test examples, and report method comparisons on the test set. For correctness, we employ `gpt-4o-mini` to evaluate each output explanation, assigning a score of 0 (incorrect), 1 (partially correct), or 2 (completely correct).
 
 | Condition | Avg tokens | Fully correct |
 |---|---|---|
@@ -31,25 +28,15 @@ decimals — see [Statistical details](#statistical-details) for why and for the
 | Const-steer alone | 149.9 | 90-95% |
 | **Prompt+Steer** | **49.3** | **90-95%** |
 
-**Steering on top of the prompt gets a further ~13% token reduction beyond prompting alone, with no
-statistically detectable correctness cost.** Const-steer alone is a non-result at this coefficient
-(149.9 tokens, indistinguishable from Base) — the coefficient was calibrated specifically for the
-combined regime, not as a standalone replacement for the instruction; this matches the general
-pattern (also seen at higher coefficients during calibration) that steering alone is substantially
-weaker than prompting.
+**Steering on top of the prompt gets a further ~13% token reduction beyond prompting alone.** Constant steering alone results in 149.9 tokens, which makes it indistinguishable from Base; the coefficient was calibrated specifically for the combined regime, not as a standalone replacement for the instruction. This matches a pattern we observed at higher coefficients during calibration: difference-of-means steering alone is substantially weaker than prompting.
 
-Base's 150.0 average is right-censored: 95.6% of Base responses hit `MAX_NEW_TOKENS` without the
-model choosing to stop, so it's a floor on "at least this many tokens," not a real measurement of
-default verbosity — the Prompt vs. Prompt+Steer comparison (both close to fully natural stopping)
-is the one to trust.
+The average token count reported for Base is lower than its true, uncensored value, since 95.6% of Base responses hit `MAX_NEW_TOKENS` without the model choosing to stop. The comparison we find most informative is Prompt vs. Prompt+Steer, since both are close to fully natural stopping.
 
 ![Test set: token count vs. correctness across the four conditions](results/summary_plot_test.png)
 
 ## Is caveman's style actually being followed?
 
-Caveman's rule is explicit and mechanically checkable: "Drop: articles (a/an/the)... Fragments OK."
-So rather than eyeballing it, we measured literal compliance — how often `a`/`an`/`the` still shows
-up despite being told not to, across all 180 test responses:
+The rule from caveman's `SKILL.md` is explicit and mechanically checkable: "Drop: articles (a/an/the)... Fragments OK." Instead of eyeballing compliance, we ran a regex search counting how often `a`, `an`, or `the` appears despite being told not to. Article usage varies sharply across the four conditions:
 
 | Condition | Responses containing a/an/the | Articles per 100 words |
 |---|---|---|
@@ -58,11 +45,7 @@ up despite being told not to, across all 180 test responses:
 | Prompt | 46.1% | 4.27 |
 | **Prompt+Steer** | **31.1%** | **2.48** |
 
-The instruction is genuinely in the prompt (verified directly — see `model_common.CAVEMAN_SUFFIX`)
-and genuinely changes behavior (articles drop ~66% vs. Base), but compliance with the specific
-"drop articles" rule is partial, not total: 46% of Prompt responses still use one. Const-steer alone
-(coefficient calibrated for the combined regime, not as a standalone replacement) shows no effect on
-style either, consistent with it showing no effect on length. Steering on top of the prompt pushes
+The prompt instruction (`model_common.CAVEMAN_SUFFIX`) changes model behavior substantially: articles drop roughly 66% relative to Base. Compliance with the specific "drop articles" rule remains only partial, however, and 46% of prompted responses still use one. Const-steer alone (calibrated for the combined regime, not as a standalone replacement) shows no effect on style either, consistent with its lack of effect on length. Steering on top of the prompt pushes
 compliance further than the text instruction manages alone — fewer responses use an article at all,
 and at a lower rate when they do. Since compliance is partial, the examples below were selected for
 being representative (Prompt itself already article-free) rather than for the single biggest
@@ -196,17 +179,9 @@ and shouldn't, be trusted.
 
 ## Statistical details
 
-**Is the Prompt+Steer test-set result just cherry-picking?** Two separate risks, checked
-separately:
+**Is the Prompt+Steer test-set result just cherry-picking?** We check two separate risks.
 
-**1. Is "Prompt+Steer ≥ Prompt" on the test set real, or noise?** Test set, n=180, McNemar's exact
-test on paired fully-correct outcomes (same 180 examples, both conditions): Prompt 165/180,
-Prompt+Steer 166/180 — 4 examples correct only under Prompt, 5 correct only under Prompt+Steer,
-**p = 1.0**. That's as close to a coin flip as paired data gets. Read this as: **steering shows no
-detectable correctness cost**, not as "steering improves correctness" — the one-example difference
-carries no statistical weight either way. What *is* well-supported and doesn't need a significance
-test: the ~13% token reduction, since it's a large, consistent shift across the distribution, not a
-one-example-sized effect.
+**1. "Prompt+Steer ≥ Prompt" on the test set.** On the test set (n=180), McNemar's exact test on paired fully-correct outcomes gives Prompt 165/180 and Prompt+Steer 166/180 — four examples correct only under Prompt, five correct only under Prompt+Steer — for **p = 1.0**, as close to a coin flip as paired data gets. This means activation steering carries no detectable correctness cost, not that it improves correctness, while still delivering a ~13% token reduction.
 
 **2. Was picking layer 14/coeff 6 out of 20 dev configs cherry-picking?** Partly, yes — and it's
 worth being explicit about where. Wilson 95% CIs on the dev full-correct rate (n=50 per config):
