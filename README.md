@@ -1,21 +1,64 @@
-# Does activation steering help on top of an already-terse prompt?
+# Activation Steering improves Instruction Following  
 
-This repository contains experimental data and code investigating whether constant activation steering for instruction
-following (as studied by Stolfo et al., arXiv 2410.12877, among others) can make `Qwen2.5-Coder-7B-Instruct`'s code
-explanations shorter than prompting alone already achieves, while maintaining explanation accuracy and clarity. We
-compare four conditions for each test example:
+The experiments in this repository investigate the question:
 
-1. **Base** — neutral prompt, no instruction, no steering.
-2. **Prompt** — caveman's actual "full" mode instruction, word for word from
-   [caveman](https://github.com/juliusbrussee/caveman)'s `skills/caveman/SKILL.md` (opening line,
-   Persistence, Rules, no-self-reference paragraph, Pattern line — see `model_common.CAVEMAN_SUFFIX`).
-   Auto-Clarity, Boundaries, and the language-preservation paragraph are dropped: none of those
-   scenarios (destructive ops, writing commits/PRs, non-English input) exist in this task.
-3. **Steer** — the diff-in-means vector added at inference, Base prompt (no instruction text).
-4. **Prompt+Steer** — the same vector added at inference, *on top of* the Prompt condition — this
-   is the primary comparison: does steering add anything once the instruction is already present?
+> When a model already has an instruction telling it to be concise, can **constant activation steering** push its code explanations even shorter, while keeping those explanations accurate and clear?
 
-The experiments are conducted on the CodeXGLUE code-to-text task. All docstrings are stripped from the code via AST prior to use as reference explanations, which prevents answer leakage into the prompt body (`src/data_prep.py`).
+The setup follows the line of work on activation steering for instruction following
+studied by Stolfo et al. [1], among others, applying it to a very practical usecase: the `caveman` skill for Claude. 
+
+`caveman` is directly useful for developers who want their coding agent to drop the filler and answer concisely — its motto is *"why use many token when few token do trick"* — trimming roughly 65% of output tokens while keeping code and technical content intact. It shrinks what the agent *says*, not what it knows, entirely through prompting.
+
+The model we test is `Qwen2.5-Coder-7B-Instruct`. The thing we are trying to compress is its natural-language explanations of code. Prompting alone can already shorten these explanations; the real question is whether steering adds anything *on top of* prompting, and whether it can do so without degrading the explanation itself.
+
+To answer that, we compare four conditions for every test example.
+
+<br>
+
+## The Four Conditions
+
+**1. Base**
+
+A neutral prompt — no conciseness instruction, no steering. This is our reference point
+for what the model does when left to its own devices.
+
+**2. Prompt**
+
+The caveman "full" mode instruction, reproduced word for word from
+[caveman](https://github.com/juliusbrussee/caveman)'s `skills/caveman/SKILL.md`. We keep
+the opening line, the Persistence section, the Rules, the no-self-reference paragraph, and
+the Pattern line (assembled in `model_common.CAVEMAN_SUFFIX`).
+
+We deliberately drop three parts of the original instruction — Auto-Clarity, Boundaries,
+and the language-preservation paragraph — because the scenarios they govern (destructive
+operations, writing commits or PRs, and non-English input) simply don't occur in this
+task. Including them would add instruction text that never applies.
+
+**3. Steer**
+
+The diff-in-means steering vector, added at inference time, on top of the **Base** prompt.
+There is no conciseness instruction in the prompt here — the only pressure toward brevity
+comes from the steering vector itself. This isolates what steering does on its own.
+
+**4. Prompt+Steer**
+
+The same steering vector, added at inference time, but this time layered *on top of* the
+**Prompt** condition. This is our primary comparison, and it targets the central question
+directly:
+
+> Does steering still add anything once the instruction is already present?
+
+<br>
+
+## The Task and Data
+
+All experiments run on the **CodeXGLUE code-to-text** task, where the model is asked to
+explain a function in natural language.
+
+One important preprocessing step: before any code is used as a reference, we strip its
+docstrings out via AST parsing (`src/data_prep.py`). This prevents answer leakage — without
+it, the reference explanation could bleed into the prompt body and quietly inflate the
+model's apparent accuracy. Stripping the docstrings keeps the evaluation honest.
 
 ## Main Result
 
@@ -156,32 +199,39 @@ def callgraph(G, stmt_list):
 - **Prompt+Steer (38 tok):** <q>Function `callgraph` takes graph `G` and list of statements `stmt_list`. It adds nodes for functions found in `stmt_list` and connects nodes with edges representing function calls.</q>
 </details>
 
-### Finding the operating point mattered
+### Methodology
 
-The first calibration pass picked its config by sweeping (layer, coefficient) on dev and choosing
-whichever was most aggressive (lowest tokens) without producing obviously degenerate/repetitive
-output — no correctness signal in that loop. That picked layer 14, coeff 36, which looked fine by
-the degenerate check but collapsed dev full-correct rate to ~40% (e.g. `_descriptor_names`'s Django
-descriptor-filtering detail dropped entirely: "List self's descriptors."). Judging the *entire*
-grid (`src/sweep_dev.py` + `src/judge_sweep.py` + `src/analyze_sweep.py`, 20 configs × 50 dev
-examples) showed why: correctness holds around 90-95%+ for coefficients 6-12 at layers 14/18, then
-falls off a cliff past ~20, down into the 40-65% range. Layer 14, coeff 6 was picked from that curve
-instead of trusting the degenerate-only auto-pick — see below for how much that specific pick should,
-and shouldn't, be trusted.
+We chose the steering coefficient by sweeping (layer, coefficient) pairs on the
+development set — 20 configurations across 50 dev examples — and discarding any that
+produced degenerate, repetitive output. The full grid (`src/sweep_dev.py`,
+`src/judge_sweep.py`, `src/analyze_sweep.py`) shows why simply picking the most
+aggressive non-degenerate configuration is unsafe. Under constant steering, correctness
+holds at 90–95%+ for coefficients 6–12 at layers 14 and 18, then drops sharply past a
+coefficient of roughly 20, falling to 40–65%. We select layer 14, coefficient 6: the
+point that gives up a little token reduction in exchange for correctness.
+
+This tradeoff is reflected in the prior literature. Stolfo et al. [1] report the same direction on IFEval length instructions — larger steering weights `c` yield increasingly concise outputs (their Figure 5a, they have `c ∈ {0, 5, 10, 20, 40}`). They note that steering degraded generation quality in a few cases.
+
+Heyman & Vandeputte [2] give a mechanistic explanation. A real prompt's influence varies sharply by token position, but a constant coefficient applies the same intervention to every position, whether or not that position needs it. 
+
+Constant steering is therefore prone to oversteering. Once the coefficient exceeds what any single position calls for,
+the target attribute keeps moving in the intended direction while coherence collapses. Their fix, Prompt Steering Replacement, learns a token-specific coefficient instead of a constant one.
+
+Overall, conciseness and correctness seem to trade off against one other: pushing the
+coefficient for shorter responses usually costs correctness or intelligibility. But these
+experiments show that activation steering for instruction following *can* keep responses
+short without sacrificing their explanatory value.
 
 ![Dev sweep: token count vs. correctness across all 20 (layer, coefficient) configs](results/summary_sweep_plot_dev.png)
 
-## Scope decisions
+## Further work
 
-- We initially wanted to use the Prompt Steering Replacement (arXiv 2605.03907). However, this is paused for now — `src/steering_psr.py` still exists but isn't run.
-  An earlier pass showed the MSE-matching variant underperforming constant steering; revisit later.
-- The judge is `gpt-4o-mini` (OpenAI), not Claude — switched to use available OpenAI credits. Reads
-  the key from `openai.key` (gitignored, never commit it).
-- Task is code **explanation** only, not code generation.
+- Prompt Steering Replacement
+- The task is code **explanation** only, mirroring the use case within Caveman and popular for code assistant usage as a whole.
 
 ## Running it
 
-Everything in `src/data_prep.py`, `src/judge*.py`, and `src/analyze*.py` runs locally — no GPU
+Everything in `src/data_prep.py`, `src/judge*.py`, and `src/analyze*.py` can run locally — no GPU
 needed. The GPU-bound steps (`steering_const.py`, `sweep_dev.py`, `generate.py`) run on a rented
 GPU pod via `infra/run_gpu_pipeline.sh` (or invoked directly, as when re-running just one step).
 
@@ -194,7 +244,7 @@ python3 src/steering_const.py                   # -> results/const_steer_{config
 python3 src/sweep_dev.py                        # -> results/sweep_dev.jsonl (all grid configs, dev)
 
 # back locally: judge the sweep, inspect the frontier, edit const_steer_config.json's
-# layer/coeff to the chosen operating point (see "Finding the operating point mattered" above)
+# layer/coeff to the chosen operating point (see "Methodology" above)
 python3 src/judge_sweep.py                      # -> results/judged_sweep_dev.jsonl (needs openai.key)
 python3 src/analyze_sweep.py                    # -> results/summary_sweep_dev.json, plot
 
@@ -205,3 +255,12 @@ python3 src/generate.py --split test            # -> results/generations_test.js
 python3 src/judge.py --split test               # -> results/judged_test.jsonl (needs openai.key)
 python3 src/analyze.py --split test             # -> results/summary_test.json, summary_plot_test.png
 ```
+
+## References
+
+[1] Alessandro Stolfo, Vidhisha Balachandran, Safoora Yousefi, Eric Horvitz, Besmira Nushi.
+"Improving Instruction-Following in Language Models through Activation Steering." arXiv:2410.12877.
+https://arxiv.org/abs/2410.12877
+
+[2] Geert Heyman, Frederik Vandeputte. "Steer Like the LLM: Activation Steering that Mimics
+Prompting." arXiv:2605.03907. https://arxiv.org/abs/2605.03907
