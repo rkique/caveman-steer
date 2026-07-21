@@ -9,6 +9,9 @@ from data_utils import RESULTS_DIR, read_jsonl
 CONDITIONS = ["base", "prompt", "const", "prompt_const"]
 LABELS = {"base": "Base", "prompt": "Prompt", "const": "Const-steer", "prompt_const": "Prompt+Steer"}
 MARKERS = {"base": "o", "prompt": "s", "const": "^", "prompt_const": "D"}
+# Same validated all-pairs-safe 4-color palette as the sweep plot (dataviz skill, light-mode static PNG).
+COLORS = {"base": "#2a78d6", "prompt": "#eb6834", "const": "#1baf7a", "prompt_const": "#4a3aa7"}
+MODEL_NAME = "Qwen2.5-Coder-7B-Instruct"
 INK = "#0b0b0b"
 MUTED = "#898781"
 GRIDLINE = "#e1e0d9"
@@ -32,31 +35,32 @@ def summarize(rows: list[dict]) -> dict[str, dict]:
 
 
 def plot(summary: dict[str, dict], out_path) -> None:
-    fig, ax = plt.subplots(figsize=(6, 5), facecolor="#fcfcfb")
+    fig, ax = plt.subplots(figsize=(6.5, 5.5), facecolor="#fcfcfb")
     ax.set_facecolor("#fcfcfb")
 
     for cond in CONDITIONS:
         s = summary[cond]
-        ax.scatter(
-            s["avg_tokens"],
-            s["full_correct_rate"] * 100,
-            marker=MARKERS[cond],
-            s=110,
-            color=INK,
-            zorder=3,
-        )
+        x, y = s["avg_tokens"], s["full_correct_rate"] * 100
+        ax.scatter(x, y, marker=MARKERS[cond], s=130, color=COLORS[cond], zorder=3)
         ax.annotate(
-            LABELS[cond],
-            (s["avg_tokens"], s["full_correct_rate"] * 100),
+            f"{LABELS[cond]}\n{y:.1f}%",
+            (x, y),
             textcoords="offset points",
-            xytext=(8, 6),
+            xytext=(9, 7),
             fontsize=10,
             color=INK,
+            linespacing=1.4,
         )
 
-    ax.set_xlabel("Average response tokens (lower = cheaper)", color=INK)
-    ax.set_ylabel("Fully-correct rate (%)", color=INK)
-    ax.set_title("Terseness vs. correctness: Prompt vs. Const-steer vs. PSR", color=INK, fontsize=11)
+    ymin, ymax = ax.get_ylim()
+    ax.set_ylim(ymin - 0.3, ymax + 0.9)  # headroom so top annotations clear the title
+    xmin, xmax = ax.get_xlim()
+    ax.set_xlim(xmin, xmax + (xmax - xmin) * 0.12)  # headroom for right-side annotations
+
+    ax.set_xlabel("Average response tokens", color=INK)
+    ax.set_ylabel("Fully-correct rate", color=INK)
+    ax.set_title(f"Steering and Prompt Correctness - {MODEL_NAME}", color=INK, fontsize=12)
+    ax.yaxis.set_major_formatter(lambda v, _: f"{v:.1f}%")
     ax.grid(True, color=GRIDLINE, linewidth=0.8, zorder=0)
     for spine in ["top", "right"]:
         ax.spines[spine].set_visible(False)

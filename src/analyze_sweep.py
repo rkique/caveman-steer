@@ -51,7 +51,7 @@ def plot(summary: list[dict], out_path) -> None:
             zorder=3,
         )
         ax.annotate(
-            f"c{s['coeff']}",
+            f"c={s['coeff']}",
             (s["avg_tokens"], s["full_correct_rate"] * 100),
             textcoords="offset points",
             xytext=(6, 4),
